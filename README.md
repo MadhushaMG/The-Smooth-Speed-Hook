@@ -12,9 +12,8 @@ web / desktop (electrone / react)
 import { useSmoothSpeed } from './hooks/useSmoothSpeed';
 
 const SpeedMeter = ({ apiSpeed }: { apiSpeed: number }) => {
-  // apiSpeed එක 45 ඉඳන් 0 ට ආවත්, displaySpeed එක 45, 44, 43... ලෙස අඩුවේ.
-  const displaySpeed = useSmoothSpeed(apiSpeed, 1500); // 1.5s duration for smoothness
 
+  const displaySpeed = useSmoothSpeed(apiSpeed, 1500); 
   return (
     <div style={{ fontSize: '48px', fontWeight: 'bold' }}>
       {displaySpeed} <span style={{ fontSize: '18px' }}>km/h</span>
