@@ -1,67 +1,75 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { io, Socket } from 'socket.io-client';
 
-export const useSmoothSpeed = (apiSpeed: number, duration: number = 1500) => {
-  const [displaySpeed, setDisplaySpeed] = useState(0);
+const SOCKET_SERVER_URL = "https://nearu.kalametiyaseafoodrestaurant.com";
 
-  const currentDisplayRef = useRef(0); 
-  const zeroCountRef = useRef(0);
-  const requestRef = useRef<number>();
-
-  const animate = useCallback(
-    (from: number, to: number, startTime: number, time: number) => {
-      const elapsed = time - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const easedProgress = 1 - Math.pow(1 - progress, 3);
-
-      const next = from + (to - from) * easedProgress;
-      const rounded = Math.round(next);
-
-      currentDisplayRef.current = rounded;
-      setDisplaySpeed(rounded);
-
-      if (progress < 1) {
-        requestRef.current = requestAnimationFrame((t) =>
-          animate(from, to, startTime, t)
-        );
-      }
-    },
-    [duration]
-  );
+export const useNearuSocket = (circleId: string, userId: string) => {
+  const [members, setMembers] = useState<any[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    let finalTarget = apiSpeed;
-
-    if (apiSpeed === 0) {
-      zeroCountRef.current += 1;
-    
-      if (zeroCountRef.current < 5 && currentDisplayRef.current > 0) {
-        finalTarget = currentDisplayRef.current;
-      }
-    } else {
-      zeroCountRef.current = 0;
-
-    
-      const diff = Math.abs(apiSpeed - currentDisplayRef.current);
-      if (diff > 50 && currentDisplayRef.current > 0) {
-        return;
-      }
-    }
-
-   
-    if (requestRef.current) cancelAnimationFrame(requestRef.current);
-
   
-    const snapStart = currentDisplayRef.current;
-    const startTime = performance.now();
+    socketRef.current = io(SOCKET_SERVER_URL, {
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+      forceNew: true
+    });
 
-    requestRef.current = requestAnimationFrame((t) =>
-      animate(snapStart, finalTarget, startTime, t)
-    );
+    const socket = socketRef.current;
 
+    socket.on('connect', () => {
+      console.log('✅ Connected to Nearu Server');
+      setIsConnected(true);
+      
+
+      socket.emit('join_circle', circleId);
+    });
+
+ 
+    socket.on('circle_data_sync', (data: any[]) => {
+      console.log('🔄 Received Sync Data:', data);
+      setMembers(data);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('❌ Socket Connection Error:', err.message);
+    });
+
+    socket.on('disconnect', () => {
+      setIsConnected(false);
+      console.log('❌ Disconnected from Server');
+    });
+
+ 
     return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      if (socket) socket.disconnect();
     };
-  }, [apiSpeed, animate]);
+  }, [circleId]);
 
-  return displaySpeed;
+
+  const emitLocation = useCallback((locationData: {
+    latitude: number;
+    longitude: number;
+    speed: number;
+    battery: string;
+    name: string;
+  }) => {
+    if (socketRef.current && isConnected) {
+      const payload = {
+        circleId,
+        userId,
+        ...locationData
+      };
+      
+      console.log('📤 Sending Location:', payload);
+      socketRef.current.emit('send_location', payload);
+    }
+  }, [circleId, userId, isConnected]);
+
+  return { 
+    members,      
+    isConnected,  
+    emitLocation  
+  };
 };
